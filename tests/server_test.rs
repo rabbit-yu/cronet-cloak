@@ -43,7 +43,6 @@ async fn test_nike_request() {
 
     // We assume the user has configured the server or environment.
     // If the proxy is not valid, the request might fail, but the format is correct.
-    // The Go test uses "TEST_BASE_URL", here we assume localhost:3000.
 
     let resp = client
         .post(service_url)
@@ -67,7 +66,6 @@ async fn test_nike_request() {
         .unwrap_or(false);
     if !success {
         // It might fail due to proxy auth, but we want to verify the executor didn't crash.
-        // Go test just prints error.
         println!(
             "Request executed but returned internal failure: {:?}",
             body.get("error_message")
