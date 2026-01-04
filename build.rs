@@ -15,10 +15,26 @@ fn main() {
 
     // 0. Export Cronet Version
     let version_path = lib_dir.join("VERSION");
-    let version = std::fs::read_to_string(&version_path)
-        .expect("Failed to read VERSION file")
-        .trim()
-        .to_string();
+    let version_content =
+        std::fs::read_to_string(&version_path).expect("Failed to read VERSION file");
+
+    // Parse VERSION file (format: MAJOR=x\nMINOR=y\nBUILD=z\nPATCH=w)
+    let mut major = String::new();
+    let mut minor = String::new();
+    let mut build = String::new();
+    let mut patch = String::new();
+    for line in version_content.lines() {
+        if let Some((key, value)) = line.split_once('=') {
+            match key.trim() {
+                "MAJOR" => major = value.trim().to_string(),
+                "MINOR" => minor = value.trim().to_string(),
+                "BUILD" => build = value.trim().to_string(),
+                "PATCH" => patch = value.trim().to_string(),
+                _ => {}
+            }
+        }
+    }
+    let version = format!("{}.{}.{}.{}", major, minor, build, patch);
     println!("cargo:rustc-env=CRONET_VERSION={}", version);
     println!("cargo:rerun-if-changed={}", version_path.display());
 
@@ -71,6 +87,50 @@ fn main() {
     // 3. Link against the Cronet DLL/SO
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=dylib=cronet");
+
+    // 4. Copy DLL to output directory for Windows
+    #[cfg(target_os = "windows")]
+    {
+        // Get the target directory (target/debug or target/release)
+        let out_dir = env::var("OUT_DIR").unwrap();
+        // OUT_DIR is like: target/debug/build/cronet-cloak-xxx/out
+        // We need: target/debug/
+        let target_dir = PathBuf::from(&out_dir)
+            .ancestors()
+            .nth(3)
+            .unwrap()
+            .to_path_buf();
+
+        // The actual DLL name that the linker expects (from .lib file)
+        let dll_name = format!("cronet.{}.dll", version);
+        let src_dll = lib_dir.join("cronet.dll");
+        let dst_dll = target_dir.join(&dll_name);
+
+        // Copy DLL if source exists and destination doesn't or is older
+        if src_dll.exists() {
+            let should_copy = if dst_dll.exists() {
+                let src_meta = std::fs::metadata(&src_dll).ok();
+                let dst_meta = std::fs::metadata(&dst_dll).ok();
+                match (src_meta, dst_meta) {
+                    (Some(s), Some(d)) => s.modified().ok() > d.modified().ok(),
+                    _ => true,
+                }
+            } else {
+                true
+            };
+
+            if should_copy {
+                std::fs::copy(&src_dll, &dst_dll).expect("Failed to copy DLL to target dir");
+                println!(
+                    "cargo:warning=Copied {} to {}",
+                    src_dll.display(),
+                    dst_dll.display()
+                );
+            }
+        }
+
+        println!("cargo:rerun-if-changed={}", src_dll.display());
+    }
 
     println!("cargo:rerun-if-changed=build.rs");
 }
