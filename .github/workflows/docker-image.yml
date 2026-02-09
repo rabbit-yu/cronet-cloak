@@ -1,19 +1,20 @@
-name: Build and Push Docker Image
+name: Docker Image CI
 
 on:
   push:
-    branches: [ "master", "main" ] # 监听主分支代码提交
+    branches: [ "master", "main" ] # 监听代码提交
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }} # 自动获取你的仓库名 (rabbit-yu/cronet-cloak)
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # 关键点1：赋予上传到 Packages 的权限
     permissions:
       contents: read
-      packages: write # 赋予上传权限
+      packages: write
 
     steps:
       - name: Checkout repository
@@ -24,21 +25,20 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }} # 自动生成的 token，无需手动设置
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v4
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest
-            type=sha
+          tags: type=raw,value=latest
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
-          push: true # 关键：开启推送功能
+          # 关键点2：这里开启了 push (上传) 功能
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
